@@ -8,3 +8,4 @@ Check the CHATGPT folder, for the chat history, and the CHATGPT version
 --You can see the latest version running here:
   https://cursorkeysretrogames.itch.io/doctor-d64
 
+--NOTE: The latest version has and will have (many?) manually coded improvements over the chatGPT version.

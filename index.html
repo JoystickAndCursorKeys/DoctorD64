@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>D64 Doctor</title>
+        <style>
+            body {
+                background-color: #1f1f1f;
+                color: #ffffff;
+            }
+    
+            h1, h2, p {
+                color: #ffc107; /* Yellow color for headings and text */
+            }
+    
+            input, button {
+                background-color: #222; /* Dark background for input and button */
+                color: #ffffff;
+                border: none;
+                padding: 8px;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+    
+            button:hover {
+                background-color: #444; /* Darken button on hover */
+            }
+    
+            pre {
+                background-color: #333; /* Dark background for output area */
+                color: #ffffff;
+                padding: 10px;
+                border-radius: 4px;
+            }
+
+
+            @font-face{font-family:"C64 Pro Mono Local";src:url(C64_Pro_Mono-STYLE.ttf) format("truetype")}
+            .c64pm{font:normal 12pt/16px "C64 Pro Mono Local",verdana,helvetica,sans-serif;letter-spacing:0;padding:0;margin:0}
+
+        </style>
+    </head>   
+<body>
+    <h1>List directory of a D64 disk image file</h1>
+    <input type="file" id="fileInput">
+    <button id="uploadButton">Start</button>
+    <div>
+        <label for="detailedMode">Detailed Mode:</label>
+        <input type="checkbox" id="detailedMode">
+    </div>
+
+    <h2>Directory Information</h2>
+    <p><strong>Directory Entries:</strong></p>
+    <p id="diskTitle"></p>
+    <pre class="c64pm" id="directoryEntries"></pre>
+    <p id="diskFree"></p>
+
+    <script>
+ class D64Disk {
+    constructor(arrayBuffer) {
+        this.byteArray = new Uint8Array(arrayBuffer);
+        this.tracks = [];
+        this.currentPosition = 0;
+        this.maxSectors = 683;
+
+        // Initialize tracks
+        this.tracks.push(null); // Placeholder for track 0
+        for (let trackNumber = 1; trackNumber <= 40; trackNumber++) {
+            this.tracks.push(this.processDiskTrack(trackNumber));
+        }
+
+        // Populate the directory
+        const directorySector = this.tracks[18].sectors[1];
+        this.directory = new Directory(directorySector, this);
+        //this.processDirectory( directorySector );
+    }
+
+    processDiskTrack(trackNumber) {
+        let sectorCount;
+        if (trackNumber <= 17) {
+            sectorCount = 21;
+        } else if (trackNumber <= 24) {
+            sectorCount = 19;
+        } else if (trackNumber <= 30) {
+            sectorCount = 18;
+        } else {
+            sectorCount = 17;
+        }
+
+        const sectors = [];
+        for (let i = 0; i < sectorCount; i++) {
+            sectors.push(this.byteArray.subarray(this.currentPosition, this.currentPosition + 256));
+            this.currentPosition += 256;
+        }
+
+        return {
+            trackNumber: trackNumber,
+            sectors: sectors,
+            byteOffset: this.currentPosition - 256 * sectorCount
+        };
+    }
+
+
+
+    getDiskTitle(bamSector) {
+        const diskTitleBytes = bamSector.subarray(0x90, 0xA0);
+        const diskTitle = String.fromCharCode(...diskTitleBytes);
+        return diskTitle;
+    }
+
+    getFreeSectors() {
+        const usedSectors = this.directory.entries.reduce((total, entry) => total + entry.fileLength, 0);
+        const freeSectors = this.maxSectors - usedSectors;
+        return freeSectors;
+    }
+
+}
+
+class DirectoryEntry {
+    constructor(directoryEntryBytes) {
+        this.fileType = directoryEntryBytes[2].toString(16).padStart(2, '0');
+        this.fileName = String.fromCharCode(...directoryEntryBytes.subarray(5, 21));
+        this.fileNameBinary=( directoryEntryBytes.subarray(5, 21) );
+        this.fileLength = (directoryEntryBytes[0x1F] << 8) + directoryEntryBytes[0x1E]; // Swapped length bytes
+        this.nextTrack = directoryEntryBytes[0];
+        this.nextSector = directoryEntryBytes[1];
+        this.fileStartTrack = directoryEntryBytes[3]; // New field
+        this.fileStartSector = directoryEntryBytes[4]; // New field
+    }
+
+    convertTypeToText() {
+        switch (this.fileType) {
+            case '80':
+                return 'DEL';
+            case '81':
+                return 'SEQ';
+            case '82':
+                return 'PRG';
+            case '83':
+                return 'USR';
+            case '84':
+                return 'REL';
+            default:
+                return '???';
+        }
+    }
+}
+
+
+class Directory {
+    constructor(directorySector, disk) {
+        this.entries = [];
+        this.processDirectory(directorySector, disk);
+    }
+
+    processDirectory(directorySector, disk) {
+        const directoryEntries = [];
+
+        while (true) {
+                this.processDirectorySector(directorySector, directoryEntries);
+
+                const nextDirectoryTrack = directorySector[0];
+                const nextDirectorySector = directorySector[1];
+
+                if (nextDirectoryTrack === 0 && nextDirectorySector === 255) {
+                    break; // No next directory sector
+                }
+
+                if (nextDirectorySector === 255) {
+                    break; // No next directory sector
+                }
+
+                directorySector = disk.tracks[nextDirectoryTrack].sectors[nextDirectorySector];
+        }
+
+        this.entries = directoryEntries;
+    }
+
+    processDirectorySector(directorySector, directoryEntries) {
+        for (let entryIndex = 0; entryIndex < 8; entryIndex++) {
+            const directoryEntryOffset = entryIndex * 32;
+            const directoryEntryBytes = directorySector.subarray(directoryEntryOffset, directoryEntryOffset + 32);
+
+            const fileType = directoryEntryBytes[2];
+            if (fileType === 0) {
+                continue; // Skip unused entries
+            }
+
+            const directoryEntryObject = new DirectoryEntry(directoryEntryBytes);
+            directoryEntries.push(directoryEntryObject);
+        }
+    }
+
+
+    convertPETSIIByteArrayToInnerString(byteArray) {
+
+        let result = '';
+
+        for (let i = 0; i < byteArray.length; i++) {
+            const byte = byteArray[i];
+            if (byte >= 32 && byte <= 93) {
+                result += String.fromCharCode(byte);
+            } else if( byte >= 94 && byte <= 127) {
+                let code = `0ee${(byte-32).toString(16).padStart(2, '0')}`;
+                const charCode = parseInt( code , 16);
+                result += String.fromCharCode(charCode);;
+            }
+            else if( byte ==160) {
+                result += " ";
+            } else if( byte >= 161 && byte <= 255) {
+                let code = `0ee${(byte-64).toString(16).padStart(2, '0')}`;
+                const charCode = parseInt( code , 16);
+                result += String.fromCharCode(charCode);;
+            }
+            else {
+                let code = `0ee00`;
+                const charCode = parseInt( code , 16);
+                result += String.fromCharCode(charCode);;
+            }
+            
+            
+        }
+
+        return result;
+    }
+
+
+    getEntriesAsText(shortMode) {
+        let entriesText = '';
+
+        this.entries.forEach((entry, index) => {
+            if (shortMode) {
+
+                //let petsciiName  = this.convertPETSIIByteArrayToInnerString( entry.fileNameBinary );
+                
+                entriesText += `${entry.fileLength}\t"${entry.fileName}" ${entry.convertTypeToText()}\n`;
+            } else {
+                entriesText += `Entry ${index + 1}:\n`;
+                entriesText += `  File Type: 0x${entry.fileType}\n`;
+                entriesText += `  File Name: ${entry.fileName}\n`;
+                entriesText += `  File Length: ${entry.fileLength}\n`;
+                entriesText += `  Next Track: ${entry.nextTrack}\n`;
+                entriesText += `  Next Sector: ${entry.nextSector}\n`;
+                entriesText += `  File Start Track: ${entry.fileStartTrack}\n`;
+                entriesText += `  File Start Sector: ${entry.fileStartSector}\n\n`;
+            }
+        });
+
+        return entriesText; // Display or use the entries text as needed
+    }
+
+    getEntriesAsInnerHTML(shortMode) {
+        let entriesText = '';
+
+        this.entries.forEach((entry, index) => {
+            if (shortMode) {
+
+                let petsciiName  = this.convertPETSIIByteArrayToInnerString( entry.fileNameBinary );
+                
+                entriesText += `${entry.fileLength}\t"${petsciiName}" ${entry.convertTypeToText()}<br>`;
+            } else {
+                entriesText += `Entry ${index + 1}:<br>`;
+                entriesText += `  File Type: 0x${entry.fileType}<br>`;
+                entriesText += `  File Name: ${entry.fileName}<br>`;
+                entriesText += `  File Length: ${entry.fileLength}<br>`;
+                entriesText += `  Next Track: ${entry.nextTrack}<br>`;
+                entriesText += `  Next Sector: ${entry.nextSector}<br>`;
+                entriesText += `  File Start Track: ${entry.fileStartTrack}<br>`;
+                entriesText += `  File Start Sector: ${entry.fileStartSector}<br><br>`;
+            }
+        });        
+
+        return entriesText; // Display or use the entries text as needed
+    }
+}
+
+
+// Attach event listener
+document.getElementById('uploadButton').addEventListener('click', function () {
+    const fileInput = document.getElementById('fileInput');
+    const directoryEntriesElement = document.getElementById('directoryEntries');
+    const shortModeCheckbox = !document.getElementById('detailedMode').checked;
+    const diskTitleElement = document.getElementById('diskTitle');
+    const diskFreeElement = document.getElementById('diskFree');
+
+    const file = fileInput.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const d64Disk = new D64Disk(e.target.result);
+
+            var text = d64Disk.directory.getEntriesAsInnerHTML(shortModeCheckbox);
+            directoryEntriesElement.innerHTML = text;
+            diskTitleElement.textContent = `Disk Name: "${d64Disk.getDiskTitle(d64Disk.tracks[18].sectors[0])}"`;
+            diskFreeElement.textContent = `Free: ${d64Disk.getFreeSectors()} blocks / sectors`;
+        };
+
+        reader.readAsArrayBuffer(file);
+    }
+});
+    </script>
+</body>
+</html>

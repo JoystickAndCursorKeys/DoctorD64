@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>D64 Doctor</title>
+</head>
+<body>
+    <h1>Upload a D64 disk image file</h1>
+    <input type="file" id="fileInput">
+    <button id="uploadButton">Upload</button>
+
+    <h2>Uploaded File Tracks and Sectors</h2>
+    <pre id="output"></pre>
+
+    <h2>Directory Information</h2>
+    <p><strong>Directory Entries:</strong></p>
+    <pre id="directoryEntries"></pre>
+
+    <style>
+        body {
+            background-color: #1f1f1f;
+            color: #ffffff;
+        }
+
+        h1, h2, p {
+            color: #ffc107; /* Yellow color for headings and text */
+        }
+
+        input, button {
+            background-color: #222; /* Dark background for input and button */
+            color: #ffffff;
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #444; /* Darken button on hover */
+        }
+
+        pre {
+            background-color: #333; /* Dark background for output area */
+            color: #ffffff;
+            padding: 10px;
+            border-radius: 4px;
+        }
+    </style>
+
+    <script>
+        var currentPosition = 0;
+
+        function processDirectorySector(directorySector, disk, directoryEntries) {
+            for (var entryIndex = 0; entryIndex < 8; entryIndex++) {
+                var directoryEntryOffset = entryIndex * 32;
+                var directoryEntry = directorySector.subarray(directoryEntryOffset, directoryEntryOffset + 32);
+
+                var fileType = directoryEntry[2];
+                if (fileType === 0) {
+                    continue; // Skip unused entries
+                }
+
+                var fileTypeHex = fileType.toString(16).padStart(2, '0');
+                var fileNameBytes = directoryEntry.subarray(5, 15);
+                var fileName = String.fromCharCode(...fileNameBytes);
+                var fileLength = (directoryEntry[0x1F] << 8) + directoryEntry[0x1E]; // Swapped length bytes
+                var nextTrack = directoryEntry[0];
+                var nextSector = directoryEntry[1];
+                var fileStartTrack = directoryEntry[3]; // New field
+                var fileStartSector = directoryEntry[4]; // New field
+
+                directoryEntries.push({
+                    fileType: fileTypeHex,
+                    fileName: fileName,
+                    fileLength: fileLength,
+                    nextTrack: nextTrack,
+                    nextSector: nextSector,
+                    fileStartTrack: fileStartTrack,
+                    fileStartSector: fileStartSector
+                });
+            }
+        }
+
+        function processDirectory(directorySector, disk) {
+            var directoryEntries = [];
+
+            while (true) {
+                processDirectorySector(directorySector, disk, directoryEntries);
+
+                var nextDirectoryTrack = directorySector[0];
+                var nextDirectorySector = directorySector[1];
+
+                if (nextDirectoryTrack === 0 && nextDirectorySector === 255) {
+                    break; // No next directory sector
+                }
+
+                if (nextDirectorySector === 255) {
+                    break; // No next directory sector
+                }
+
+                directorySector = disk.tracks[nextDirectoryTrack].sectors[nextDirectorySector];
+            }
+
+            return directoryEntries;
+        }
+
+        function processDiskTrack(trackNumber, byteArray) {
+            var sectorCount;
+            if (trackNumber <= 17) {
+                sectorCount = 21;
+            } else if (trackNumber <= 24) {
+                sectorCount = 19;
+            } else if (trackNumber <= 30) {
+                sectorCount = 18;
+            } else {
+                sectorCount = 17;
+            }
+
+            var sectors = [];
+            for (var i = 0; i < sectorCount; i++) {
+                sectors.push(byteArray.subarray(currentPosition, currentPosition + 256));
+                currentPosition += 256;
+            }
+
+            return {
+                trackNumber: trackNumber,
+                sectors: sectors,
+                byteOffset: currentPosition - 256 * sectorCount
+            };
+        }
+
+        function processDisk(fileArrayBuffer) {
+            var byteArray = new Uint8Array(fileArrayBuffer);
+            var tracks = [];
+
+            // Push an empty track to index 0
+            tracks.push({
+                trackNumber: 0,
+                sectors: [],
+                byteOffset: 0
+            });
+
+            currentPosition = 0;
+            for (var trackNumber = 1; trackNumber <= 40; trackNumber++) {
+                var track = processDiskTrack(trackNumber, byteArray);
+                tracks.push(track);
+            }
+
+            return tracks;
+        }
+
+        function displayDirectoryEntries(entries, element) {
+            var entriesText = '';
+            entries.forEach(function(entry, index) {
+                entriesText += `Entry ${index + 1}:\n`;
+                entriesText += `  File Type: 0x${entry.fileType}\n`;
+                entriesText += `  File Name: ${entry.fileName}\n`;
+                entriesText += `  File Length: ${entry.fileLength}\n`;
+                entriesText += `  Next Track: ${entry.nextTrack}\n`;
+                entriesText += `  Next Sector: ${entry.nextSector}\n`;
+                entriesText += `  File Start Track: ${entry.fileStartTrack}\n`; // New field
+                entriesText += `  File Start Sector: ${entry.fileStartSector}\n\n`; // New field
+            });
+
+            element.textContent = entriesText;
+        }
+
+        document.getElementById('uploadButton').addEventListener('click', function() {
+            var fileInput = document.getElementById('fileInput');
+            var directoryEntriesElement = document.getElementById('directoryEntries');
+
+            var file = fileInput.files[0];
+            if (file) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var tracks = processDisk(e.target.result);
+                    var directorySector = tracks[18].sectors[1];
+                    var directoryEntries = processDirectory(directorySector, { tracks });
+
+                    displayDirectoryEntries(directoryEntries, directoryEntriesElement);
+                };
+
+                reader.readAsArrayBuffer(file);
+            }
+        });
+    </script>
+</body>
+</html>

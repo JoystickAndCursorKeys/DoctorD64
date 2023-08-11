@@ -1,0 +1,6 @@
+Download the fonts here:
+
+https://style64.org/release/c64-truetype-v1.2.1-style
+
+Download the zipfile, and put the font file in the fonts directory.
+You only need the file called: C64_Pro_Mono-STYLE.ttf

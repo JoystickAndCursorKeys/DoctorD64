@@ -1,65 +1,311 @@
 <!DOCTYPE html>
-<html>
-    <head>
-        <title>D64 Doctor</title>
-        <style>
-            body {
-                background-color: #1f1f1f;
-                color: #ffffff;
-            }
-    
-            h1, h2, p {
-                color: #ffc107; /* Yellow color for headings and text */
-            }
-    
-            input, button {
-                background-color: #222; /* Dark background for input and button */
-                color: #ffffff;
-                border: none;
-                padding: 8px;
-                border-radius: 4px;
-                cursor: pointer;
-            }
-    
-            button:hover {
-                background-color: #444; /* Darken button on hover */
-            }
-    
-            pre {
-                background-color: #333; /* Dark background for output area */
-                color: #ffffff;
-                padding: 10px;
-                border-radius: 4px;
-            }
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doctor D64</title>
+    <link rel="icon" href="img/icon.png">
+    <style>
+        /* Dark Mode Styles for the tabs and content */
+        body {
+            background-color: #121212;
+            color: #FFFFFF;
+        }
+
+        .tabs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            border: 1px solid #555;
+            cursor: pointer;
+            background-color: #242424;
+            transition: background-color 0.2s;
+        }
+
+        .tab:hover {
+            background-color: #444;
+        }
+
+        .tab.active {
+            background-color: #0077FF; /* Highlighted background color for active tab */
+            color: #FFFFFF;
+        }
+
+        .content {
+            display: none;
+            border: 1px solid #555;
+            padding: 20px;
+            background-color: #242424;
+        }
+
+        .content.active {
+            display: block;
+        }
+
+        h1, h2, p {
+            color: #ffc107; /* Yellow color for headings and text */
+        }
+
+        input, button {
+            background-color: #222; /* Dark background for input and button */
+            color: #ffffff;
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #444; /* Darken button on hover */
+        }
+
+        pre {
+            background-color: #333; /* Dark background for output area */
+            color: #ffffff;
+            padding: 10px;
+            border-radius: 4px;
+        }
 
 
-            @font-face{font-family:"C64 Pro Mono Local";src:url(C64_Pro_Mono-STYLE.ttf) format("truetype")}
-            .c64pm{font:normal 12pt/16px "C64 Pro Mono Local",verdana,helvetica,sans-serif;letter-spacing:0;padding:0;margin:0}
+        @font-face{font-family:"C64 Pro Mono Local";src:url(fonts/C64_Pro_Mono-STYLE.ttf) format("truetype")}
+        .c64pm{font:normal 12pt/16px "C64 Pro Mono Local",verdana,helvetica,sans-serif;letter-spacing:0;padding:0;margin:0}
+        .ascii{
 
-        </style>
-    </head>   
+            font-family: 'Courier New', Monaco, Consolas, 'Lucida Console', monospace;
+            font-size: 16px; /* Adjust as needed */            
+            font-weight: bold;
+            letter-spacing:0;
+            padding:0;
+            margin:0
+        }
+
+        .bigger{
+
+            font-size: 20px; /* Adjust as needed */            
+        }        
+
+    </style>
+</head>
 <body>
-    <h1>List directory of a D64 disk image file</h1>
-    <input type="file" id="fileInput">
-    <button id="uploadButton">Start</button>
+
+<div class="tabs">
+    <div class="tab active" onclick="toggleTab('main')">Main</div>
+    <div class="tab" onclick="toggleTab('list')">List</div>
+    <div class="tab" onclick="toggleTab('multiList')">Multi List</div>
+</div>
+
+<div class="content active" id="main">
+    <h1>Doctor D6</h1>
+    <p>Examine D64 files directly from your browser</p>
+    <img src="img/logo.png"><br>
+</div>
+
+<div class="content" id="list">
+    <h1>List</h1>
+    <p>List the contents of a single D64 file.</p>
+
+    <input type="file" id="D64FileInput">
+    
     <div>
-        <label for="detailedMode">Detailed Mode:</label>
-        <input type="checkbox" id="detailedMode">
+        <label for="D64DetailedMode">Detailed Mode:</label>
+        <input type="checkbox" id="D64DetailedMode">
+    </div>
+    <div>
+        <label for="D64PETSCIIMode">PETSCII Mode:</label>
+        <input type="checkbox" id="D64PETSCIIMode">
+    </div>
+    <div>
+        <button class="bigger" id="D64UploadButton">List</button>
     </div>
 
     <h2>Directory Information</h2>
     <p><strong>Directory Entries:</strong></p>
-    <p id="diskTitle"></p>
-    <pre class="c64pm" id="directoryEntries"></pre>
-    <p id="diskFree"></p>
+    <p id="D64DiskTitle"></p>
+    <pre class="c64pm" id="D64DirectoryEntries"></pre>
+    <p id="D64DiskFree"></p>
 
-    <script>
- class D64Disk {
-    constructor(arrayBuffer) {
+</div>
+
+<div class="content" id="multiList">
+    <h1>Multi List</h1>
+    <p>List the contents of multiple D64 files. (provided as a ZIP)</p>
+
+    <div>
+        <label for="ZIPConcateningMode">Concatenating Mode:</label>
+        <input type="checkbox" id="ZIPConcateningMode">
+    </div>
+
+    <input type="file" id="zipFileInput">
+    <div id="extractedFiles"></div>
+        
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip-utils/0.1.0/jszip-utils.min.js"></script>
+
+<script>
+
+    var diskImages = [];
+
+    function checkD64FileExtension( filePath ) {
+
+        const fileName = filePath;
+        
+        // Extract the file extension
+        const extension = fileName.slice((fileName.lastIndexOf(".") - 1 >>> 0) + 2); 
+        
+        // Check if the extension is 'd64' (case insensitive)
+        if(extension.toLowerCase() === 'd64'.toLowerCase()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    function checkZIPFileExtension( filePath ) {
+
+        const fileName = filePath;
+        
+        // Extract the file extension
+        const extension = fileName.slice((fileName.lastIndexOf(".") - 1 >>> 0) + 2); 
+        
+        // Check if the extension is 'd64' (case insensitive)
+        if(extension.toLowerCase() === 'zip'.toLowerCase()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+
+    function blobToArrayBuffer(blob, callback) {
+        const reader = new FileReader();
+
+        reader.onload = function(event) {
+            const arrayBuffer = event.target.result;
+            callback(arrayBuffer);
+        };
+
+        reader.readAsArrayBuffer(blob);
+    }
+
+
+    
+
+    document.getElementById("zipFileInput").addEventListener("change", function(event) {
+      //let fileList = document.getElementById("fileList");
+      //fileList.innerHTML = ""; // Clear any previous listings
+  
+      let extractedFilesDiv = document.getElementById("extractedFiles");
+      let file = event.target.files[0];
+
+      if( !checkZIPFileExtension ( file.name ) ) {
+        alert("Only ZIP files supported");
+        return;
+      }   
+
+      const ZIPConcateningCheckBox = document.getElementById('ZIPConcateningMode').checked;
+
+   
+
+      if( ZIPConcateningCheckBox == false) {
+        extractedFilesDiv.innerHTML = '';
+      }
+      JSZip.loadAsync(file).then(function(zip) {
+
+            diskImages = [];
+            
+            zip.forEach(function(relativePath, zipEntry) {
+
+                  if( !checkD64FileExtension( relativePath ) ) {
+                    return;
+                  }                
+                  zipEntry.async("blob").then(function(content) {
+
+                      blobToArrayBuffer(content, function(arrayBuffer) {
+                        // Use the arrayBuffer as needed
+                        console.log(arrayBuffer);
+
+                        //var buffer = stringToBinaryArray(content);    
+                        let image = { path: relativePath, content: new D64Disk( arrayBuffer, relativePath ) };
+
+                        diskImages.push( image );
+                        let fileDiv = document.createElement("div");
+                        var list = image.content.directory.getEntriesAsText( true );
+                        fileDiv.innerHTML = `<strong>${relativePath}:</strong><pre>${list}</pre>`;
+                        extractedFilesDiv.appendChild(fileDiv);                        
+                      });
+
+
+
+                  });
+              });
+          });
+    });
+  
+
+
+  
+  function extractFiles() {
+      let fileInput = document.getElementById("zipFileInput");
+      let file = fileInput.files[0];
+      let extractedFilesDiv = document.getElementById("extractedFiles");
+      extractedFilesDiv.innerHTML = ""; // Clear any previous listings
+  
+      if (file) {
+          JSZip.loadAsync(file).then(function(zip) {
+              zip.forEach(function(relativePath, zipEntry) {
+                  zipEntry.async("text").then(function(content) {
+                      let fileDiv = document.createElement("div");
+                      fileDiv.innerHTML = `<strong>${relativePath}:</strong><pre>${content}</pre>`;
+                      extractedFilesDiv.appendChild(fileDiv);
+                  });
+              });
+          });
+      } else {
+          alert("Please select a zip file first!");
+      }
+  }
+      </script>
+
+
+<script>
+    function toggleTab(pageId) {
+        // Get all content divs and tabs
+        let contents = document.querySelectorAll('.content');
+        let tabs = document.querySelectorAll('.tab');
+
+        // Hide all content divs and remove active state from tabs
+        contents.forEach(content => content.classList.remove('active'));
+        tabs.forEach(tab => tab.classList.remove('active'));
+
+        // Display the selected content div and set its tab to active state
+        document.getElementById(pageId).classList.add('active');
+        [...tabs].find(tab => tab.getAttribute("onclick").includes(pageId)).classList.add('active');
+    }
+
+    toggleTab('list')
+
+    class D64Disk {
+
+    constructor(arrayBuffer, fn ) {
         this.byteArray = new Uint8Array(arrayBuffer);
         this.tracks = [];
         this.currentPosition = 0;
         this.maxSectors = 683;
+
+        var checkSum = 0;
+        for( var i=0; i<this.byteArray.byteLength; i++) {
+            checkSum += this.byteArray[ i ];
+        }
+
+        console.log( "image file: " + fn );
+        console.log( "checkSum: " + checkSum );
+        console.log( "binary length: " + this.byteArray.byteLength );
 
         // Initialize tracks
         this.tracks.push(null); // Placeholder for track 0
@@ -69,8 +315,20 @@
 
         // Populate the directory
         const directorySector = this.tracks[18].sectors[1];
+        
+        if( fn === undefined ) {
+            this.imageFileName = "UNKNOWN";
+        }
+        else {
+            this.imageFileName = fn; 
+        }
+
         this.directory = new Directory(directorySector, this);
-        //this.processDirectory( directorySector );
+        
+    }
+
+    setImageFileName( fn ) {
+        this.imageFileName = fn;
     }
 
     processDiskTrack(trackNumber) {
@@ -98,8 +356,6 @@
         };
     }
 
-
-
     getDiskTitle(bamSector) {
         const diskTitleBytes = bamSector.subarray(0x90, 0xA0);
         const diskTitle = String.fromCharCode(...diskTitleBytes);
@@ -116,14 +372,33 @@
 
 class DirectoryEntry {
     constructor(directoryEntryBytes) {
-        this.fileType = directoryEntryBytes[2].toString(16).padStart(2, '0');
-        this.fileName = String.fromCharCode(...directoryEntryBytes.subarray(5, 21));
-        this.fileNameBinary=( directoryEntryBytes.subarray(5, 21) );
-        this.fileLength = (directoryEntryBytes[0x1F] << 8) + directoryEntryBytes[0x1E]; // Swapped length bytes
-        this.nextTrack = directoryEntryBytes[0];
-        this.nextSector = directoryEntryBytes[1];
-        this.fileStartTrack = directoryEntryBytes[3]; // New field
-        this.fileStartSector = directoryEntryBytes[4]; // New field
+
+        this.fileType = 0;
+        this.fileName = "UNDEFINED";
+        this.fileNameBinary= null;
+        this.fileLength = 0;
+        this.nextTrack = 0;
+        this.nextSector = 0;
+        this.fileStartTrack = 0; // New field
+        this.fileStartSector = 0; // New field   
+
+        if( directoryEntryBytes === undefined ) { ; }
+        else {
+
+            this.fileType = directoryEntryBytes[2].toString(16).padStart(2, '0');
+            this.fileName = String.fromCharCode(...directoryEntryBytes.subarray(5, 21));
+            this.fileNameBinary=( directoryEntryBytes.subarray(5, 21) );
+            this.fileLength = (directoryEntryBytes[0x1F] << 8) + directoryEntryBytes[0x1E]; // Swapped length bytes
+            this.nextTrack = directoryEntryBytes[0];
+            this.nextSector = directoryEntryBytes[1];
+            this.fileStartTrack = directoryEntryBytes[3]; // New field
+            this.fileStartSector = directoryEntryBytes[4]; // New field
+
+        }
+    }
+
+    setFileName( name ) {
+        this.fileName = name;
     }
 
     convertTypeToText() {
@@ -160,14 +435,31 @@ class Directory {
                 const nextDirectoryTrack = directorySector[0];
                 const nextDirectorySector = directorySector[1];
 
-                if (nextDirectoryTrack === 0 && nextDirectorySector === 255) {
+                if (nextDirectoryTrack === 0 || nextDirectorySector === 255) {
                     break; // No next directory sector
                 }
 
-                if (nextDirectorySector === 255) {
-                    break; // No next directory sector
+                //if (nextDirectorySector === 255) {
+                //    break; // No next directory sector
+                //}
+
+                if( nextDirectoryTrack == 0 || nextDirectoryTrack>40 ) {
+                    
+                    var dummy = new DirectoryEntry( undefined );
+                    dummy.setFileName("ERROR: Wrong next directory track T"+ nextDirectoryTrack +" (S"+nextDirectorySector+")" );
+                    directoryEntries.push( dummy );
+                    break;
                 }
 
+                var nextTrack = disk.tracks[nextDirectoryTrack];
+                if( nextDirectorySector >= nextTrack.sectors.length ) {
+                    var dummy = new DirectoryEntry( undefined );
+                    dummy.setFileName("ERROR: Non existent next directory track/sector T" + nextDirectoryTrack +" S"+nextDirectorySector );
+                    directoryEntries.push( dummy );
+                    break;
+
+                }
+                    
                 directorySector = disk.tracks[nextDirectoryTrack].sectors[nextDirectorySector];
         }
 
@@ -189,8 +481,30 @@ class Directory {
         }
     }
 
+    convertPETSIIByteArrayToAsciiString(byteArray) {
 
-    convertPETSIIByteArrayToInnerString(byteArray) {
+        let result = '';
+
+        for (let i = 0; i < byteArray.length; i++) {
+            const byte = byteArray[i];
+            if (byte >= 32 && byte <= 93) {
+                result += String.fromCharCode(byte);
+            } 
+            else if( byte ==160) {
+                result += " ";
+            }            
+            else {
+                result += "?";
+            }
+            
+            
+        }
+
+        return result;
+    }
+
+
+    convertPETSIIByteArrayToHTML(byteArray) {
 
         let result = '';
 
@@ -227,15 +541,27 @@ class Directory {
         let entriesText = '';
 
         this.entries.forEach((entry, index) => {
+
+
+            let asciiName;
+
+            asciiName = entry.fileName;
+            if( entry.fileNameBinary != null ) {
+                asciiName = this.convertPETSIIByteArrayToAsciiString( entry.fileNameBinary );
+            }
+
             if (shortMode) {
 
-                //let petsciiName  = this.convertPETSIIByteArrayToInnerString( entry.fileNameBinary );
+                //
                 
-                entriesText += `${entry.fileLength}\t"${entry.fileName}" ${entry.convertTypeToText()}\n`;
+                entriesText += `${entry.fileLength}\t"${asciiName}" ${entry.convertTypeToText()}`
+                entriesText += `\n`;
+
+                //DEBUG entriesText += `\tN:T${entry.nextTrack}S${entry.nextSector} \n`;
             } else {
                 entriesText += `Entry ${index + 1}:\n`;
                 entriesText += `  File Type: 0x${entry.fileType}\n`;
-                entriesText += `  File Name: ${entry.fileName}\n`;
+                entriesText += `  File Name: ${asciiName}\n`;
                 entriesText += `  File Length: ${entry.fileLength}\n`;
                 entriesText += `  Next Track: ${entry.nextTrack}\n`;
                 entriesText += `  Next Sector: ${entry.nextSector}\n`;
@@ -247,19 +573,24 @@ class Directory {
         return entriesText; // Display or use the entries text as needed
     }
 
-    getEntriesAsInnerHTML(shortMode) {
+    getEntriesAsInnerPETSCIIHTML(shortMode) {
         let entriesText = '';
 
         this.entries.forEach((entry, index) => {
-            if (shortMode) {
 
-                let petsciiName  = this.convertPETSIIByteArrayToInnerString( entry.fileNameBinary );
-                
+            let petsciiName;
+            petsciiName = entry.fileName;
+            if( entry.fileNameBinary != null ) {
+                asciiName = petsciiName  = this.convertPETSIIByteArrayToHTML( entry.fileNameBinary );
+            }
+
+            if (shortMode) {
+    
                 entriesText += `${entry.fileLength}\t"${petsciiName}" ${entry.convertTypeToText()}<br>`;
             } else {
                 entriesText += `Entry ${index + 1}:<br>`;
                 entriesText += `  File Type: 0x${entry.fileType}<br>`;
-                entriesText += `  File Name: ${entry.fileName}<br>`;
+                entriesText += `  File Name: ${petsciiName}<br>`;
                 entriesText += `  File Length: ${entry.fileLength}<br>`;
                 entriesText += `  Next Track: ${entry.nextTrack}<br>`;
                 entriesText += `  Next Sector: ${entry.nextSector}<br>`;
@@ -273,13 +604,20 @@ class Directory {
 }
 
 
-// Attach event listener
-document.getElementById('uploadButton').addEventListener('click', function () {
-    const fileInput = document.getElementById('fileInput');
-    const directoryEntriesElement = document.getElementById('directoryEntries');
-    const shortModeCheckbox = !document.getElementById('detailedMode').checked;
-    const diskTitleElement = document.getElementById('diskTitle');
-    const diskFreeElement = document.getElementById('diskFree');
+function handleD64ListRequest() {
+    const fileInput = document.getElementById('D64FileInput');
+    if( !checkD64FileExtension ( fileInput.value ) ) {
+        alert("Only D64 images supported");
+        return;
+    }
+
+
+    const directoryEntriesElement = document.getElementById('D64DirectoryEntries');
+    const shortModeCheckbox = !document.getElementById('D64DetailedMode').checked;
+    const PETSCIIModeCheckbox = document.getElementById('D64PETSCIIMode').checked;
+    
+    const diskTitleElement = document.getElementById('D64DiskTitle');
+    const diskFreeElement = document.getElementById('D64DiskFree');
 
     const file = fileInput.files[0];
     if (file) {
@@ -287,15 +625,44 @@ document.getElementById('uploadButton').addEventListener('click', function () {
         reader.onload = function (e) {
             const d64Disk = new D64Disk(e.target.result);
 
-            var text = d64Disk.directory.getEntriesAsInnerHTML(shortModeCheckbox);
-            directoryEntriesElement.innerHTML = text;
+            if( PETSCIIModeCheckbox ) {
+                var text = d64Disk.directory.getEntriesAsInnerPETSCIIHTML(shortModeCheckbox);
+                directoryEntriesElement.innerHTML = text;
+                directoryEntriesElement.className = "c64pm";
+            }
+            else {
+                var text = d64Disk.directory.getEntriesAsText(shortModeCheckbox);
+                directoryEntriesElement.textContent = text;
+                directoryEntriesElement.className = "ascii";
+            }
+            
             diskTitleElement.textContent = `Disk Name: "${d64Disk.getDiskTitle(d64Disk.tracks[18].sectors[0])}"`;
             diskFreeElement.textContent = `Free: ${d64Disk.getFreeSectors()} blocks / sectors`;
         };
 
         reader.readAsArrayBuffer(file);
     }
+}
+
+
+// Attach event listener
+document.getElementById('D64UploadButton').addEventListener('click', function () {
+    handleD64ListRequest();
 });
-    </script>
+
+document.getElementById('D64FileInput').addEventListener('change', function () {
+    handleD64ListRequest();
+});
+
+document.getElementById('D64DetailedMode').addEventListener('change', function () {
+    handleD64ListRequest();
+});
+
+document.getElementById('D64PETSCIIMode').addEventListener('change', function () {
+    handleD64ListRequest();
+});
+
+</script>
+
 </body>
 </html>

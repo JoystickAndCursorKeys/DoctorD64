@@ -108,8 +108,6 @@
     <h1>List</h1>
     <p>List the contents of a single D64 file.</p>
 
-    <input type="file" id="D64FileInput">
-    
     <div>
         <label for="D64DetailedMode">Detailed Mode:</label>
         <input type="checkbox" id="D64DetailedMode">
@@ -118,6 +116,11 @@
         <label for="D64PETSCIIMode">PETSCII Mode:</label>
         <input type="checkbox" id="D64PETSCIIMode">
     </div>
+
+    <div>
+        <input type="file" id="D64FileInput" accept=".D64, .d64">
+    </div>
+
     <div>
         <button class="bigger" id="D64UploadButton">List</button>
     </div>
@@ -138,9 +141,16 @@
         <label for="ZIPConcateningMode">Concatenating Mode:</label>
         <input type="checkbox" id="ZIPConcateningMode">
     </div>
+    <div>
+        <input type="file" id="zipFileInput"  accept=".ZIP, .zip">
+    </div>
+    <div>
+        <button onclick="copyZipContentToClipboard()">Copy</button>
+    </div>
 
-    <input type="file" id="zipFileInput">
     <div id="extractedFiles"></div>
+
+
         
 </div>
 
@@ -150,6 +160,7 @@
 <script>
 
     var diskImages = [];
+    var ZipContentAsText = ""; 
 
     function checkD64FileExtension( filePath ) {
 
@@ -194,6 +205,16 @@
     }
 
 
+    function copyZipContentToClipboard() {
+        navigator.clipboard.writeText(ZipContentAsText).then(function() {
+        console.log('Text successfully copied to clipboard');
+        alert( "Copied to Clipboard");
+    }).catch(function(err) {
+        console.error('Unable to copy text to clipboard', err);
+    });
+    }
+
+
     
 
     document.getElementById("zipFileInput").addEventListener("change", function(event) {
@@ -214,17 +235,34 @@
 
       if( ZIPConcateningCheckBox == false) {
         extractedFilesDiv.innerHTML = '';
+        ZipContentAsText = "";
       }
       JSZip.loadAsync(file).then(function(zip) {
 
             diskImages = [];
-            
+            var fileCount = Object.keys(zip.files).length;
+
+//            var lastFile = "";
+//            for( var i=0; i<Object.keys(zip.files).length; i++ ) {
+//                var file = Object.keys(zip.files)[i];
+//                if( checkD64FileExtension( file )  ) {
+//                    lastFile = file;
+//                }
+//            }
+
+//           if( fileCount > 0) { 
+//                //lastFile = zip.files[fileCount-1];
+//                lastFile = Object.keys(zip.files)[fileCount-1];
+//            }
+
             zip.forEach(function(relativePath, zipEntry) {
 
-                  if( !checkD64FileExtension( relativePath ) ) {
-                    return;
-                  }                
+             
                   zipEntry.async("blob").then(function(content) {
+
+                      if( !checkD64FileExtension( relativePath ) ) {
+                        return;
+                      }   
 
                       blobToArrayBuffer(content, function(arrayBuffer) {
                         // Use the arrayBuffer as needed
@@ -238,10 +276,16 @@
                         var list = image.content.directory.getEntriesAsText( true );
                         fileDiv.innerHTML = `<strong>${relativePath}:</strong><pre>${list}</pre>`;
                         extractedFilesDiv.appendChild(fileDiv);                        
+                        
+                        ZipContentAsText += `${relativePath}\n-------------\n${list}\n`;
+                        
+//                        if( relativePath == lastFile ) {
+//                            
+//                            copyToClipboard( ZipContentAsText );
+//                        }
+
+                        
                       });
-
-
-
                   });
               });
           });
@@ -289,6 +333,9 @@
     }
 
     toggleTab('list')
+
+
+
 
     class D64Disk {
 
@@ -401,7 +448,7 @@ class DirectoryEntry {
         this.fileName = name;
     }
 
-    convertTypeToText() {
+    convertD64FileHexTypeToText() {
         switch (this.fileType) {
             case '80':
                 return 'DEL';
@@ -413,8 +460,42 @@ class DirectoryEntry {
                 return 'USR';
             case '84':
                 return 'REL';
+            case '80':
+                return 'DEL';
+            case '81':
+                return 'SEQ';
+            case '82':
+                return 'PRG';
+            case '83':
+                return 'USR';
+            case '84':
+                return 'REL';
+            case 'c0':
+                return 'DEL<';
+            case 'c1':
+                return 'SEQ<';
+            case 'c2':
+                return 'PRG<';
+            case 'c3':
+                return 'USR<';
+            case 'c4':
+                return 'REL<';
+            case 'c0':
+                return 'DEL<';
+            case 'c1':
+                return 'SEQ<';
+            case 'c2':
+                return 'PRG<';
+            case 'c3':
+                return 'USR<';
+            case 'c4':
+                return 'REL<';                
+
+
             default:
                 return '???';
+
+        
         }
     }
 }
@@ -554,7 +635,7 @@ class Directory {
 
                 //
                 
-                entriesText += `${entry.fileLength}\t"${asciiName}" ${entry.convertTypeToText()}`
+                entriesText += `${entry.fileLength}\t"${asciiName}" ${entry.convertD64FileHexTypeToText()}`
                 entriesText += `\n`;
 
                 //DEBUG entriesText += `\tN:T${entry.nextTrack}S${entry.nextSector} \n`;
@@ -581,12 +662,12 @@ class Directory {
             let petsciiName;
             petsciiName = entry.fileName;
             if( entry.fileNameBinary != null ) {
-                asciiName = petsciiName  = this.convertPETSIIByteArrayToHTML( entry.fileNameBinary );
+                petsciiName  = this.convertPETSIIByteArrayToHTML( entry.fileNameBinary );
             }
 
             if (shortMode) {
     
-                entriesText += `${entry.fileLength}\t"${petsciiName}" ${entry.convertTypeToText()}<br>`;
+                entriesText += `${entry.fileLength}\t"${petsciiName}" ${entry.convertD64FileHexTypeToText()}<br>`;
             } else {
                 entriesText += `Entry ${index + 1}:<br>`;
                 entriesText += `  File Type: 0x${entry.fileType}<br>`;
